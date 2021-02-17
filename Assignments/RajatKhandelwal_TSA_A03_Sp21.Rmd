@@ -1,0 +1,225 @@
+---
+title: "ENV 790.30 - Time Series Analysis for Energy Data | Spring 2021"
+subtitle: "Assignment 3 - Due date 02/12/21"
+author: "Rajat Khandelwal"
+output: pdf_document
+geometry: margin=2.54cm
+---
+  
+## Directions
+  
+You should open the .rmd file corresponding to this assignment on RStudio. The file is available on our class repository on Github. 
+
+Once you have the project open the first thing you will do is change "Student Name" on line 3 with your name. 
+Then you will start working through the assignment by  **creating code and output** that answer each question. Be sure to use this assignment document. Your report should contain the answer to each question and any plots/tables you obtained (when applicable).
+
+Please keep this R code chunk options for the report. It is easier for us to grade when we can see code and output together. And the tidy.opts will make sure that line breaks on your code chunks are automatically added for better visualization. 
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE,warning = FALSE, message = FALSE) 
+```
+
+When you have completed the assignment, **Knit** the text and code into a single PDF file. Rename the pdf file such that it includes your first and last name (e.g., "LuanaLima_TSA_A01_Sp21.Rmd"). Submit this pdf using Sakai. 
+
+## Questions 
+
+Consider the same data you used for A2 from the spreadsheet "Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx". The data comes from the US Energy Information and Administration and corresponds to the January 2021 Monthly Energy Review. Once again you will work only with the following columns: Total Biomass Energy Production, Total Renewable Energy Production, Hydroelectric Power Consumption. Create a data frame structure with these three time series only. 
+
+R packages needed for this assignment:"forecast","tseries", and "Kendall". Install these packages, if you haven't done yet. Do not forget to load them before running your script, since they are NOT default packages.\\
+
+```{r}
+#Load/install required package here
+library(forecast)
+library(tseries)
+library(dplyr)
+library(utils)
+library(Kendall)
+library(ggplot2)
+library(readxl)
+library(cowplot)
+
+#Importing data set
+#NOTE: Locally changed name of XLSX file to "REP_Data.xlsx" for easier reference.
+data <- read_excel("~/Documents/GitHub/ENV790_30_TSA_S2021/Data/REP_Data.xlsx", skip = 10)
+data <- data %>% select(1,4:6) %>% slice(2:n())
+
+#Converting dataframe columns into numeric values
+data$`Total Biomass Energy Production` <- as.numeric(data$`Total Biomass Energy Production`)
+data$`Total Renewable Energy Production` <- as.numeric(data$`Total Renewable Energy Production`)
+data$`Hydroelectric Power Consumption` <- as.numeric(data$`Hydroelectric Power Consumption`)
+
+#Converting dataframe into time-series
+data_ts <- ts(data[2:4], start = c(1973,1), end = c(2020,10), frequency = 12)
+
+#Convert time column to date format
+data$Month <- as.Date(data$Month , format = "%m/%d/%y")
+
+#Setting parameters for future use
+ncols <- ncol(data)-1
+nobs <- nrow(data)
+```
+
+### Trend Component
+
+### Q1
+Create a plot window that has one row and three columns. And then for each object on your data frame, fill the plot window with time series plot, ACF and PACF. You may use the some code form A2, but I want all three plots on the same window this time. (Hint: watch videos for M4)
+```{r}
+shortnames <- c("TBEP", "TREP", "HPC")
+for (i in 1:ncols){
+  par(mfrow = c(1, ncols))
+  #print(colnames(data[i+1]))
+  #  print(ggplot(data, aes(x = Month, y = data_ts[,i])) +
+   # geom_line(color = "red")  +
+  #  ylab(colnames(data[i+1])) +
+  #  xlab('Year'))
+  plot(data_ts[,i], col = "red", main = shortnames[i], xlab = "Year", ylab = 
+         paste0(shortnames[i], sep = " ", "(Million BTU)"), type = "l")
+  
+  acf(data[,i+1], lag.max = 40, main = shortnames[i])
+  pacf(data[,i+1], lag.max = 40, main = shortnames[i])
+  #plot_grid(time_series, acf, pacf)
+}
+```
+
+### Q2
+From the plot in Q1, do the series Total Biomass Energy Production, Total Renewable Energy Production, Hydroelectric Power Consumption appear to have a trend? If yes, what kind of trend?
+
+\textbf{TBEP:} Has an increasing trend as the mean appears to increase over time. \newline
+\textbf{TREP:} Increasing trend as the mean appears to increase over time. \newline
+\textbf{HPC:} Doesn't show any signifcant trend visually. Shows seasonality. \newline
+
+
+### Q3
+Use the *lm()* function to fit a linear trend to the three time series. Ask R to print the summary of the regression. Interpret the regression output, i.e., slope and intercept. Save the regression coefficients for further analysis.
+```{r}
+t <- c(1:nobs)
+
+lm_list <- vector(mode = "list", length = ncols)
+beta0 <- vector(mode = "list", length = ncols)
+beta1 <- vector(mode = "list", length = ncols)
+
+for(i in 1:ncols){
+  lm_list[[i]] = lm(data_ts[,i]~t)
+  print(colnames(data[i+1]))
+  print(summary(lm_list[[i]]))
+  beta0[[i]] = as.numeric(lm_list[[i]]$coefficients[1])
+  beta1[[i]] = as.numeric(lm_list[[i]]$coefficients[2])
+}
+
+```
+\textbf{TBEP:} Slope = 0.47 indicates that TBEP has an increasing trend over time. \newline
+\textbf{TREP:} Slope = 0.84 indicates that TREP has a very strong increasing trend over time. \newline
+\textbf{HPC:} Slope = -0.07 indicates that HPC has no clear trend over time. \newline \newline
+\textbf{The intercept for all three series shows the value of the repective linear models at the beginning of the time-series.}
+
+
+### Q4
+Use the regression coefficients from Q3 to detrend the series. Plot the detrended series and  compare with the plots from Q1. What happened? Did anything change?
+
+
+\emph{Original series in red. Detrended series in green.}
+```{r}
+detrended_data <- data.frame(matrix(nrow = nobs,ncol = ncols))
+data <- as.data.frame(data)
+for (i in 1:ncols){
+    detrended_data[,i] <- data[,i+1] - (beta0[[i]] + beta1[[i]]*t)
+    print(
+       ggplot(detrended_data, aes(x = data$Month, y = detrended_data[,i]))+
+            ylab(colnames(data[i+1]))+
+            xlab("Year")+
+            geom_line(color = "green") +
+            geom_smooth(color = "orange", method = "lm")+
+            geom_line(aes(y = data[,i+1]), color = "red") +
+            geom_smooth(aes(y = data[,i+1]), color = "blue", method = "lm")
+    )
+}          
+```
+
+Yes, the linear models for all three series are effectively a flat y = 0 line. After removing the trend by subtracting the linear model from each series, we effectively get a down-shift for each series as we obtain a detrended series. This detrended series has no trend but only seasonality and random variation. \newline
+
+### Q5
+Plot ACF and PACF for the detrended series and compare with the plots from Q1. Did the plots change? How?
+
+\emph{Plots on the left are the original series. Plots on the right are the detrended series.} \newline
+```{r}
+for (i in 1:ncols){
+  par(mfrow = c(2,2))
+  acf(data[,i+1], lag = 40, main = shortnames[i])
+  acf(detrended_data[,i], lag = 40, main = shortnames[i])
+  pacf(data[,i+1], lag = 40, main = shortnames[i])
+  pacf(detrended_data[,i], lag = 40, main = shortnames[i])
+}
+```
+\newline The ACF and PACF plots for the detrended lines, when compared to that of the original series, clearly show that trend has been removed from the detrended series. After the removal of the trend, we can observe that the seasonality is more prominent in the ACF and PACF on the right. We observe more pronounced peaks at lag = 13, 25, 37 as would be expected in a series with frequency = 12. \newline
+
+## Seasonal Component
+
+Set aside the detrended series and consider the original series again from Q1 to answer Q6 to Q8.
+
+### Q6
+Do the series seem to have a seasonal trend? Which serie/series? Use function *lm()* to fit a seasonal means model to this/these time series. Ask R to print the summary of the regression. Interpret the regression output. Save the regression coefficients for further analysis.
+
+
+
+```{r}
+dummies <- vector(mode = "list", length = ncols)
+seasonal_model <- vector(mode = "list", length = ncols)
+beta_int <- vector(mode = "list", length = ncols)
+beta_coeff <- vector(mode = "list", length = ncols)
+
+for (i in 1:ncols){
+  dummies[[i]] <- seasonaldummy(data_ts[,i])
+  seasonal_model[[i]] = lm(data[,(i+1)]~dummies[[i]])
+  beta_int[[i]] <- seasonal_model[[i]]$coefficients[1]
+  beta_coeff[[i]] <- seasonal_model[[i]]$coefficients[2:12]
+   print(colnames(data[i+1]))
+   print(summary(seasonal_model[[i]]))
+}
+```
+All three series show seasonal behaviour as can be seen from the coefficients b1 to b12 for each series. All the coefficients are significantly non-zero and hence can't be ignored.  \newline
+
+### Q7
+Use the regression coefficients from Q6 to deseason the series. Plot the deseason series and compare with the plots from part Q1. Did anything change?
+
+\emph{Original series in red. Deseasoned series in green.}
+```{r}
+seasonal_comp = vector(mode = "list", length = ncols)
+deseasoned_data <- data.frame(matrix(nrow = nobs,ncol = ncols))
+for (i in 1:ncols){
+  seasonal_comp[i] = array(0,nobs)
+  for (j in 1:nobs){
+  seasonal_comp[[i]][j] = beta_int[[i]] + beta_coeff[[i]]%*%dummies[[i]][j,]
+  }
+deseasoned_data[i] <- data[i+1] - seasonal_comp[[i]]
+par(mfrow =  c(1,2))
+print(ggplot(data, aes(x = data$Month, y = data[,i+1])) +
+        geom_line(color = "red") +
+        xlab("Year") +
+        ylab(colnames(data[i+1])) +
+        geom_line(aes(y = seasonal_comp[[i]]), color = "orange")
+      )
+print(ggplot(deseasoned_data, aes(x = data$Month, y = deseasoned_data[,i])) +
+        geom_line(color = "green") +
+        xlab("Year") +
+        ylab(colnames(data[i+1]))
+)
+}
+```
+Yes, after removing the seasonality of the series, we observe a down-shift in the data points. The series now only has a trend along with random variation. \newline
+
+### Q8
+Plot ACF and PACF for the deseason series and compare with the plots from Q1. Did the plots change? How?
+
+\emph{Plots on the left are the original series. Plots on the right are the detrended series.} \newline
+```{r}
+for (i in 1:ncols){
+  par(mfrow = c(2,2))
+  acf(data[,i+1], lag = 40, main = shortnames[i])
+  acf(deseasoned_data[,i], lag = 40, main = shortnames[i])
+  pacf(data[,i+1], lag = 40, main = shortnames[i])
+  pacf(deseasoned_data[,i], lag = 40, main = shortnames[i])
+}
+```
+
+
+Yes, the plots have now changed. The ACF and PACF plots on the right clearly show no seasonality. After the removal of the seasonality, we can observe that the trend is more prominent in the ACF and PACF on the right. Peaks at lag = 13, 25, 37 are now smaller.

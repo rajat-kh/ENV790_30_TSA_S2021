@@ -158,8 +158,6 @@ ggplot(inflow_data, aes(x=my_date, y=inflow_data[,(1+iHP)])) +
             geom_smooth(color="red",method="lm") 
 
 ```
-
-
 ```{r}
 #remove the trend from series
 detrend_inflow_data <- inflow_data[,(iHP+1)]-(beta0+beta1*t)
