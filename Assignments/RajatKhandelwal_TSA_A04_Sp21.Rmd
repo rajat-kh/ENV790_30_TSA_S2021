@@ -1,0 +1,222 @@
+---
+title: "ENV 790.30 - Time Series Analysis for Energy Data | Spring 2021"
+subtitle: "Assignment 4 - Due date 02/25/21"
+author: "Rajat Khandelwal"
+output: pdf_document
+geometry: margin=2.54cm
+---
+  
+## Directions
+  
+  You should open the .rmd file corresponding to this assignment on RStudio. The file is available on our class repository on Github. And to do so you will need to fork our repository and link it to your RStudio.  
+
+Once you have the project open the first thing you will do is change "Student Name" on line 3 with your name. 
+Then you will start working through the assignment by  **creating code and output** that answer each question. Be sure to use this assignment document. Your report should contain the answer to each question and any plots/tables you obtained (when applicable).
+
+When you have completed the assignment, **Knit** the text and code into a single PDF file. Rename the pdf file such that it includes your first and last name (e.g., "LuanaLima_TSA_A04_Sp21.Rmd"). Submit this pdf using Sakai. 
+
+## Questions 
+
+Consider the same data you used for A2 from the spreadsheet "Table_10.1_Renewable_Energy_Production_and_Consumption_by_Source.xlsx". The data comes from the US Energy Information and Administration and corresponds to the January 2021 Monthly Energy Review.
+
+R packages needed for this assignment:"forecast","tseries", and "Kendall". Install these packages, if you haven't done yet. Do not forget to load them before running your script, since they are NOT default packages.\\
+```{r setup, include=FALSE, tidy = TRUE} 
+knitr::opts_chunk$set(echo = TRUE,tidy.opts=list(width.cutoff=80), tidy=FALSE,warning = FALSE, message = FALSE) 
+```
+
+```{r warnings = FALSE, messages = FALSE, errors = FALSE, info = FALSE}
+#Load/install required package here
+library(forecast)
+library(tseries)
+library(Kendall)
+library(readxl)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+```
+
+
+## Stochastic Trend and Stationarity Test
+
+For this part you will once again work only with the following columns: Total Biomass Energy Production, Total Renewable Energy Production, Hydroelectric Power Consumption. Create a data frame structure with these three time series and the Date column. Don't forget to format the date object.
+
+```{r}
+#Importing data set
+#NOTE: Locally changed name of XLSX file to "REP_Data.xlsx" for easier reference.
+data_original <- read_excel("~/Documents/GitHub/ENV790_30_TSA_S2021/Data/REP_Data.xlsx", skip = 10)
+data <- data_original %>% select(1,4:6) %>% slice(2:n())
+
+#Converting dataframe columns into numeric values
+data$`Total Biomass Energy Production` <- as.numeric(data$`Total Biomass Energy Production`)
+data$`Total Renewable Energy Production` <- as.numeric(data$`Total Renewable Energy Production`)
+data$`Hydroelectric Power Consumption` <- as.numeric(data$`Hydroelectric Power Consumption`)
+
+#Convert time column to date format
+data$Month <- as.Date(data$Month , format = "%m/%d/%y")
+#data$Month <- month(data$Month)
+
+#Converting dataframe into time-series
+data_ts <- ts(data[2:4], start = c(1973,1), end = c(2020,10), frequency = 12)
+
+#Setting parameters for future use
+ncols <- ncol(data) - 1
+nobs <- nrow(data)
+
+#Plotting the time series
+for (i in 1:ncols){
+  plot(x = data$Month, y = data_ts[,i], xlab = "Time", ylab = 
+         colnames(data[i+1]), type = "l")
+}
+```
+
+### Q1
+Now let's try to difference these three series using function diff(). Start with the original data from part (b). Try differencing first at lag 1 and plot the remaining series. Did anything change? Do the series still seem to have trend?
+```{r}
+#Running ADF test to check for Stochastic Trend
+for (i in 1:ncols){
+  print(colnames(data[i+1]))
+  print(adf.test(data_ts[,i],alternative = "stationary"))
+}
+```
+
+
+As per the ADF test, we \textbf{fail to reject the null hypothesis for TBEP and TREP}. We \textbf{reject the null hypothesis for HPC}. This means that TBEP and TREP do not have a stochastic trend but they \textbf{might} have a deterministic trend. HPC has a stochastc trend. Either way, we will take the difference to remove any sort of trend, if at all it exists. 
+\newline
+\newline
+
+```{r}
+#Creating dataframe with differenced series
+data_diff <- data.frame(as.Date(data$Month, format = '%Y-%m-%d'), 
+          c(NA, diff(data_ts[,1], differences = 1)) , c(NA, diff(data_ts[,2], 
+          differences = 1)), c(NA, diff(data_ts[,3], differences = 1))) %>% 
+  na.omit(TBEP)
+data_diff <- setNames(data_diff, c("Month", "TBEP","TREP","HPC"))
+
+#Plotting the original and differenced series together
+colours <- c("Original Series" = "red", "Differenced Series" = "blue")
+for(i in 1:ncols){
+print(ggplot(data_diff, aes(x = Month, y = data_diff[,i+1], color = 
+                              "Differenced Series")) + 
+        geom_line() +
+        xlab("Time") +
+        ylab(colnames(data_diff[i+1])) +
+        geom_smooth(aes(y=data_diff[,i+1]), method = "lm", color = "orange") +
+        geom_line(aes(y = data_ts[2:nobs,i], color = "Original Series"))+
+        geom_smooth(aes(y = data_ts[2:nobs,i]), method = "lm", color = "green") +
+        scale_colour_manual("", values = c("Original Series"="red", 
+                                           "Differenced Series"="blue")))
+      }
+
+```
+
+After running the diff() function at a lag = 1 to calculate the differenced series, we see that the \textbf{trend has been eliminated}. The differenced series (in blue) have a linear model line y = 0, which shows that the differencing the original series removed the trend for all the three series in question.
+
+### Q2
+Compute Mann-Kendall and Spearman's Correlation Rank Test for each time series. Ask R to print the results. Interpret the results. 
+```{r}
+#Creating list objects to store outputs of decompose and seasadj functions
+data_ts_decomp <- vector(mode = "list", length = ncols)
+data_ts_decomp_seasadj <- vector(mode = "list", length = ncols)
+
+for (i in 1:ncols){
+#Removing seasonality from the data to use Stationarity Tests
+  data_ts_decomp[[i]] <- decompose(data_ts[,i], "additive")
+  data_ts_decomp_seasadj[[i]] <- seasadj(data_ts_decomp[[i]])
+  
+#Stationarity Tests  
+  print(colnames(data[i+1]))
+  print("Spearman's Rank Correlation Test")
+  print(cor.test(data_ts_decomp_seasadj[[i]], array(1:574, dim = c(574,1)), 
+                 method = "spearman"))
+  print("Mann-Kendall's Test")
+  print(MannKendall(data_ts_decomp_seasadj[[i]]))
+}
+```
+The test coefficients (rho, tau) for HPC are negative, indicating a \textbf{negative coorelation (decreasing trend over time}) between this series and time. These coefficients are positive for TBEP and TREP, showing a \textbf{positive correlation (increasing trend over time)} between these two series and time. 
+
+To \textbf{test for the significance} of these correlations, we refer to the \textbf{hypothesis tests}. For all the three series, we \textbf{reject the null hypothesis that the series carry a deterministic trend} due to the extremely small p-values observed in the Spearman's Rank Correlation Test and Mann-Kendall test. Therefore, we can conclude that \textbf{all three series show a trend}.
+
+## Decomposing the series
+
+For this part you will work only with the following columns: Solar Energy Consumption and Wind Energy Consumption. 
+
+### Q3
+
+Create a data frame structure with these two time series only and the Date column. Drop the rows with *Not Available* and convert the columns to numeric. You can use filtering to eliminate the initial rows or conver to numeric and then use the drop_na() function. If you are familiar with pipes for data wrangling, try using it!
+
+```{r message= FALSE, info = FALSE, error=FALSE, warning = FALSE}
+data_renewable <- data_original %>% select(1,8,9) %>% slice(2:n()) 
+#Converting to numeric data type to drop NA data later
+data_renewable$`Solar Energy Consumption` <- as.numeric(data_renewable$`Solar Energy Consumption`)
+data_renewable$`Wind Energy Consumption` <- as.numeric(data_renewable$`Wind Energy Consumption`)
+#Converting Month column to type 'date'
+data_renewable$Month <- as.Date(data_renewable$Month, format = "%m/%d/%y")
+#Dropping NA data
+data_renewable <- drop_na(data_renewable)
+head(data_renewable)
+```
+
+### Q4
+
+Plot the Solar and Wind energy consumption over time using ggplot. Explore the function scale_x_date() on ggplot and see if you can change the x axis to improve your plot.
+Hint: use *scale_x_date(date_breaks = "5 years", date_labels = "%Y")")*
+
+Try changing the color of the wind series to blue. Hint: use *color = "blue"*
+
+```{r}
+ggplot(data_renewable, aes(x = Month)) +
+  geom_line(aes(y = `Solar Energy Consumption`, color = "Solar Energy Consumption")) +     
+  geom_line(aes(y = `Wind Energy Consumption`, color = "Wind Energy Consumption")) +
+  scale_colour_manual("Legend",breaks = c("Solar Energy Consumption",
+                                          "Wind Energy Consumption"), 
+                      values = c("yellow", "blue")) +
+  xlab("Time") +
+  ylab("Renewable Energy Consumption") +
+  scale_x_date(date_breaks ="5 years", date_labels = "%Y",
+               limits = as.Date(c("1984-01-01","2020-10-01")))
+```
+
+### Q5
+
+Transform wind and solar series into a time series object and apply the decompose function on them using the additive option. What can you say about the trend component? What about the random component? Does the random component look random? Or does it appear to still have some seasonality on it?
+
+```{r}
+data_renewable_ts <- ts(data_renewable[,2:3], start = c(1984,01), frequency = 12)
+solar_decompose_add <- decompose(data_renewable_ts[,1], "additive")
+wind_decompose_add <- decompose(data_renewable_ts[,2], "additive")
+plot(solar_decompose_add)
+```
+\textbf{Solar Energy Consumption} \newline \newline
+\textbf{Trend: } We observe an increasing trend towards the end of the series. \newline
+\textbf{Seasonality: }We observe strong seasonality as is expected of Solar Energy Consumption data. We expect higher production (and hence consumption) in the summer months, lower in the rainy/winter seasons.\newline
+\textbf{Random: } The random component does not look random, rather it looks to have some sort of seasonality which increases in amplitude towards the end of the series.
+```{r}
+plot(wind_decompose_add)
+```
+\textbf{Wind Energy Consumption}\newline \newline
+\textbf{Trend: }Shows an increasing trend towards the end of ther series. However, this starts much earlier than the trend line for the Solar Energy Consumption.\newline
+\textbf{Seasonality: }Strong seasonality is observed.\newline
+\textbf{Random: }The random component shows seasonality. 
+
+### Q6
+
+Use the decompose function again but now change the type of the seasonal component from additive to multiplicative.
+What happened to the random component this time? 
+```{r}
+solar_decompose_mul <- decompose(data_renewable_ts[,1], "multiplicative")
+wind_decompose_mul <- decompose(data_renewable_ts[,2], "multiplicative")
+plot(solar_decompose_mul)
+plot(wind_decompose_mul)
+```
+\newline
+The random component for both the series, Solar and Wind Energy Consumption \textbf{does not show seasonality} anymore and appears to be truly random.
+
+### Q7
+
+When fitting a model to this data, do you think you need all the historical data? Think about the date from 90s and early 20s. Are there any information from those year we might need to forecast the next six months of Solar and/or Wind consumption. Explain your response.
+
+\textbf{A7:}
+\textbf{No}, I believe that taking all the historical data would be misrepresentative while forecasting for the future. Current trends in the data would get diminished due to the influence of data from the late 80s and early 90s, when \textbf{renewable energy consumption} was quite low and showed big variations on a monthly basis. Further, 2020 was an outlier year, as due to \textbf{COVID-19} safety measures, a large section of the population stayed at home, driving up electricity consumption. This is reflected in the data as we can observe a sudden peak for renewable energy consumption in 2020 as compared to previous years. 
+
+Therefore, while forecasting data for the next six months, it would be \textbf{not advisable} to use very old (90s) and extremely recent (2020) data as these would lead to inaccurate forecasts.
