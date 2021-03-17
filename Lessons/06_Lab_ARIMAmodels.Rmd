@@ -40,6 +40,7 @@ library(tidyverse)
 
 ```{r}
 #Importing time series data from text file
+setwd('~/Documents/GitHub/ENV790_30_TSA_S2021/Data')
 raw_inflow_data <- read.table(file="../Data/inflowtimeseries.txt",header=FALSE,skip=0)
 
 #Trim the table to include only columns you need
@@ -79,7 +80,7 @@ Since we are working with non-seasonal ARIMA, we need to decompose the series an
 
 ```{r}
 #Exercise 1: Using R decompose function to decompose the inflow time series for HP15
-
+ts_inflow_data_decomp <- decompose(ts_inflow_data[,15], "additive")
 
 
 ```
@@ -91,17 +92,19 @@ The ACF and PACF from the seasonal adjusted series will help you specify compone
 ```{r}
 
 #Exercise 2: Creating non-seasonal inflow series for HP 15 using seasadj() function
-
+ts_inflow_data_deseasoned <- seasadj(ts_inflow_data_decomp)
 
 
 #Exercise 3: Compare ACFs for full series and deseason series
 par(mfrow=c(1,2))
-
+acf(ts_inflow_data[,15], lag.max = 40, main = "Original")
+acf(ts_inflow_data_deseasoned, lag.max = 40, main = "Deseasoned")
 
 
 #Exercise 4: Compare PACFs for full series and deseason series
 par(mfrow=c(1,2))
-
+pacf(ts_inflow_data[,15], lag.max = 40, main = "Original")
+pacf(ts_inflow_data_deseasoned, lag.max  = 40, main = "Deseasoned")
 
 ```
 
@@ -111,9 +114,12 @@ par(mfrow=c(1,2))
 Always check for stationarity before fitting ARIMA models. This will help specify component **d** of the ARIMA(p,d,q). If there is a trend you need to set **d=1**.
 
 ```{r}
-
+adf.test(ts_inflow_data_deseasoned)
+auto.arima(ts_inflow_data_deseasoned)
 #Exercise 5: Run ADF/Mann Kendall on deseasonal series and find the value of d
-
+# p = 2
+# d = 1
+# q = 
 
 
 ```
