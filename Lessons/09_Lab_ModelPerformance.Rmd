@@ -61,18 +61,18 @@ forecast=c(110,121,112,120,109)
 #Exercise 1: compute MAD, MSE and MAPE
 n=length(actual)
 
-ME = 
-MSE = 
-RMSE = 
-MAE = 
-MPE = 
-MAPE = 
+ME = mean(actual - forecast)
+MSE = mean((actual - forecast)^2)
+RMSE = MSE^0.5
+MAE = sum(abs(actual - forecast))/n
+MPE = sum((actual - forecast)/actual)*100/ n
+MAPE = sum(abs(actual - forecast)/actual)*100/n
 
 
 
 #Exercise 2: Compute the forecast accuracy metrics you calculated in Ex 1 with the results from accuracy() function.
 
-
+accuracy(forecast, x  = actual)
 ```
 
 ## Importing data
@@ -83,9 +83,9 @@ Research question: Can you forecast temperature for the next two months?
 
 ```{r}
 # Import both datasets using the read.csv function.
-Rainfall_BR <- read.csv("./Data/pr_1901_2016_BRA.csv", stringsAsFactors = TRUE)
+Rainfall_BR <- read.csv("../Data/pr_1901_2016_BRA.csv", stringsAsFactors = TRUE)
 
-Temp_BR <- read.csv("./Data/tas_1901_2016_BRA.csv", stringsAsFactors = TRUE)
+Temp_BR <- read.csv("../Data/tas_1901_2016_BRA.csv", stringsAsFactors = TRUE)
 
 # Tidy the rainfall data sets.
 #a Rename the column with Rainfall to get rid of the dots.
@@ -146,6 +146,21 @@ Which models could be used to forecast the non-seasonal temperature series? When
 ```{r}
 #Exercise 3: Try fitting different model to the deseasonal series. Check teh residuals using the checkresiduals() function.
 
+model1 <- auto.arima(BR_Temp_ts_deseas, max.P = 0, max.D = 0, max.Q = 0)
+checkresiduals(model1)
+
+NAIVE_seas <- naive(BR_Temp_ts_deseas, h=12)
+checkresiduals(NAIVE_seas)
+
+MEAN_seas <- meanf(BR_Temp_ts_deseas, h = 12)
+checkresiduals(MEAN_seas)
+
+model1_for <- forecast(model1, h = 12)
+ARIMA_scores <- accuracy(model1_for)
+MEAN_scores <- accuracy(MEAN_seas)
+NAIVE_scores <- accuracy(NAIVE_seas)
+
+data <- data.frame(t(ARIMA_scores),  t(MEAN_scores,NAIVE_scores)
 
 
 ```

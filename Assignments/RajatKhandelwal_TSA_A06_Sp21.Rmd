@@ -68,8 +68,8 @@ ggplot(data, aes(data$Month,data_ts)) +
       xlab("Time") +
       ylab("Natural Gas Generation (in 1000s of MWh)")
 par(mfrow = c(1,2))
-Acf(data_ts, main = "Original Series")
-Pacf(data_ts, main = "Original Series")
+Acf(data_ts, main = "Original Series", lag.max = 60)
+Pacf(data_ts, main = "Original Series", lag.max = 60)
 ```
 
 ### Q2
@@ -128,6 +128,8 @@ $p = 2$ \newline
 $d = 1$ \newline
 $q = 0$
 
+
+\\ estimate for differenced series.
 ### Q5
 
 Use $Arima()$ from package "forecast" to fit an ARIMA model to your series considering the order estimated in Q4. Should you allow for constants in the model, i.e., $include.mean = TRUE$ or $include.drift=TRUE$. **Print the coefficients** in your report. Hint: use the $cat()$ function to print.
@@ -153,7 +155,8 @@ plot(x = data$Month, y = data_ts_deseasoned_arima[[8]], type = "l", col = "red",
      ylab = "Residuals", xlab = "Time")
 Acf(data_ts_deseasoned_arima[[8]], main = "Residuals")
 Pacf(data_ts_deseasoned_arima[[8]], main = "Residuals")
-checkresiduals(data_ts_deseasoned_arima[[8]])
+#need to give the full df as input 
+checkresiduals(data_ts_deseasoned_arima)
 mean_residuals_deseasoned <- print(mean(data_ts_deseasoned_arima[[8]]))
 ```
 
@@ -192,8 +195,8 @@ ggplot(data[13:240,], aes(data$Month[13:240],data_ts_diff)) +
     xlab("Time") +
     ylab("Natural Gas Generation (in 1000s of MWh)")
 par(mfrow = c(1,2))
-Acf(data_ts_diff, main = "Seasonally Differenced Series ")
-Pacf(data_ts_diff, main = "Seasonally Differenced Series")
+Acf(data_ts_diff, main = "Seasonally Differenced Series ", lag.max = 60)
+Pacf(data_ts_diff, main = "Seasonally Differenced Series", lag.max = 60)
 ```
 \newline
 \textbf{Answer:} On observing the ACF of the original series, we observe negative spikes in the ACF value at lags pf 12 and 24, which is indicative of an \textbf{Seasonal Moving Average (SMA)} process. The PACF shows a sharp neagtive peak at lag = 12 which leads us to conclude that these two plots together indicate an SMA(1) process, hence \textbf{$Q = 1$}. Further, there is no indication of a Seasonal Auto-Regressive (SAR) process, therefore \textbf{$P = 0$}. We already know that \textbf{$D = 1$}. 
@@ -202,7 +205,7 @@ Therefore, in summary: \newline
 $P = 0$ \newline
 $D = 1$ \newline
 $Q = 1$ \newline
-
+P = 0, D = 1 AND Q = 1 // AFTER DISCUSSION WITH LUANA.
 Using the above information, we use the Arima() function to fit an ARIMA model with the estimated values of (p,d,q) and (P, D, Q). \textbf{Since d + D = 2, we will not include drift in our model.}
 ```{r}
 data_ts_arima <- Arima(data_ts, order = c(2,1,0), seasonal = c(0,1,1))
@@ -221,7 +224,7 @@ Checking residuals.
 plot(x = data$Month, y = data_ts_arima[[8]], type = "l", col = "red")
 Acf(data_ts_arima[[8]], main = "Residuals")
 Pacf(data_ts_arima[[8]], main = "Residuals")
-checkresiduals(data_ts_arima[[8]])
+checkresiduals(data_ts_arima)
 mean_residuals_original<- print(mean(data_ts_arima[[8]]))
 sd_residuals_original<- print(sd(data_ts_arima[[8]]))
 ```
